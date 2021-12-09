@@ -17,66 +17,6 @@ contract Context {
 }
 
 
-abstract contract Ownable is Context {
-    address private _owner;
-
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
-    /**
-     * @dev Initializes the contract setting the deployer as the initial owner.
-     */
-    constructor() internal {
-        address msgSender = _msgSender();
-        _owner = msgSender;
-        emit OwnershipTransferred(address(0), msgSender);
-    }
-
-    /**
-     * @dev Returns the address of the current owner.
-     */
-    function owner() public view returns (address) {
-        return _owner;
-    }
-
-    /**
-     * @dev Throws if called by any account other than the owner.
-     */
-    modifier onlyOwner() {
-        require(_owner == _msgSender(), 'Ownable: caller is not the owner');
-        _;
-    }
-
-    /**
-     * @dev Leaves the contract without owner. It will not be possible to call
-     * `onlyOwner` functions anymore. Can only be called by the current owner.
-     *
-     * NOTE: Renouncing ownership will leave the contract without an owner,
-     * thereby removing any functionality that is only available to the owner.
-     */
-    function renounceOwnership() public onlyOwner {
-        emit OwnershipTransferred(_owner, address(0));
-        _owner = address(0);
-    }
-
-    /**
-     * @dev Transfers ownership of the contract to a new account (`newOwner`).
-     * Can only be called by the current owner.
-     */
-    function transferOwnership(address newOwner) public onlyOwner {
-        _transferOwnership(newOwner);
-    }
-
-    /**
-     * @dev Transfers ownership of the contract to a new account (`newOwner`).
-     */
-    function _transferOwnership(address newOwner) internal {
-        require(newOwner != address(0), 'Ownable: new owner is the zero address');
-        emit OwnershipTransferred(_owner, newOwner);
-        _owner = newOwner;
-    }
-}
-
-
 interface IBEP20 {
     /**
      * @dev Returns the amount of tokens in existence.
@@ -569,7 +509,7 @@ library SafeBEP20 {
     }
 }
 
-contract BEP20Vesting is Ownable {
+contract BEP20Vesting is Context{
     // Contract libs
     using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
@@ -580,15 +520,15 @@ contract BEP20Vesting is Ownable {
     // Vesting information struct
     struct VestingBeneficiary {
         address beneficiary;
-        uint256 lockDuration;//锁仓时长
-        uint256 duration;//活动持续时长
-        uint256 amount;//投资总额
+        uint256 lockDuration;
+        uint256 duration;
+        uint256 amount;
         uint256 leftOverVestingAmount;
-        uint256 released; //已释放数
-        uint256 upfrontAmount; //起始解锁数
-        uint256 startedAt;//开始解锁日期
-        uint256 interval;//释放周期
-        uint256 lastReleasedAt;//最近释放日期
+        uint256 released;
+        uint256 upfrontAmount;
+        uint256 startedAt;
+        uint256 interval;
+        uint256 lastReleasedAt;
     }
 
     IBEP20 public token;
@@ -600,47 +540,26 @@ contract BEP20Vesting is Ownable {
     uint256 public tokenVestingCap;
 
     constructor(address _token, uint256 _tokenListingDate) public{
+        require(_token != address(0), "The token's address cannot be 0");
         token = IBEP20(_token);
         if (_tokenListingDate > 0) {
             tokenListingDate = _tokenListingDate;
         }
+
+        //todo：添加受益者
+        addBeneficiary(0x0AEB49BBCE2D6798c5EF718cc460c1dD3f430BB2,6000000000000,7948800,38880000,0,7776000);
+        addBeneficiary(0xC792E1612319Ba94c078D860848eb3c305883458,16200000000000,7948800,38880000,0,7776000);
+        addBeneficiary(0xA37E3a062e48CCb3560919d63DE6A29Cfc347476,30000000000000,7948800,38880000,0,7776000);
+        addBeneficiary(0xA608FE94cC2397bB019bf642D7CF65BCcB26D370,45000000000000,15724800,0,0,0);
+        addBeneficiary(0xbEd23eE50eD036cFa3986B4DB8B5E4721a200CB3,30000000000000,15811200,38880000,0,7776000);
+        addBeneficiary(0xc58407B81f62553D1f371F2456c548aB1F82E150,60000000000000,7948800,0,0,0);
+        addBeneficiary(0x52Ee965c22a482b37D0c5C4F4C67B2F921dFbaB7,30000000000000,15724800,0,0,0);
     }
 
-    // only owner or added beneficiaries can release the vesting amount
+    // only added beneficiaries can release the vesting amount
     modifier onlyBeneficiaries() {
-        require(
-            owner() == _msgSender() || beneficiaries[_msgSender()].amount > 0,
-            "You cannot release tokens!"
-        );
+        require(beneficiaries[_msgSender()].amount > 0,"You cannot release tokens!");
         _;
-    }
-
-    function setToken(address _token) public onlyOwner {
-        require(
-            _token != address(0),
-            "The token's address cannot be 0"
-        );
-        token = IBEP20(_token);
-    }
-    /**
-     * @dev Set first day token listing on exchange for vesting process
-     */
-    function setTokenListingDate(uint256 _tokenListingDate) public onlyOwner {
-        require(
-            _tokenListingDate >= block.timestamp,
-            "Token listing must be in future date"
-        );
-
-        tokenListingDate = _tokenListingDate;
-
-        uint256 beneficiaryCount = beneficiaryAddresses.length;
-        for (uint256 i = 0; i < beneficiaryCount; i++) {
-            VestingBeneficiary storage info = beneficiaries[
-            beneficiaryAddresses[i]
-            ];
-
-            info.startedAt = _tokenListingDate.add(info.lockDuration);
-        }
     }
 
     /**
@@ -653,7 +572,7 @@ contract BEP20Vesting is Ownable {
         uint256 _duration,
         uint256 _upfrontAmount,
         uint256 _interval
-    ) public onlyOwner {
+    ) internal {
         require(
             _beneficiary != address(0),
             "The beneficiary's address cannot be 0"
@@ -678,7 +597,7 @@ contract BEP20Vesting is Ownable {
             _duration,
             _amount,
             _leftOverVestingAmount,
-            _upfrontAmount,
+            0,
             _upfrontAmount,
             vestingStartedAt,
             _interval,
@@ -687,12 +606,6 @@ contract BEP20Vesting is Ownable {
 
         beneficiaryAddresses.push(_beneficiary);
         tokenVestingCap = tokenVestingCap.add(_amount);
-
-        // Transfer immediately if any upfront amount
-        if (_upfrontAmount > 0) {
-            emit Released(_beneficiary, _amount);
-            token.safeTransfer(_beneficiary, _upfrontAmount);
-        }
     }
 
     /**
@@ -707,8 +620,7 @@ contract BEP20Vesting is Ownable {
         uint256
     )
     {
-        VestingBeneficiary memory info = beneficiaries[_beneficiary];
-        if (info.amount == 0) {
+        if (beneficiaries[_beneficiary].amount == 0) {
             return (0, 0, block.timestamp);
         }
 
@@ -718,7 +630,7 @@ contract BEP20Vesting is Ownable {
 
         return (
         _vestedAmount,
-        _vestedAmount.sub(info.released),
+        _vestedAmount.sub(beneficiaries[_beneficiary].released),
         _lastIntervalDate
         );
     }
@@ -731,53 +643,57 @@ contract BEP20Vesting is Ownable {
     view
     returns (uint256, uint256)
     {
-        VestingBeneficiary memory info = beneficiaries[_beneficiary];
-        require(info.amount > 0, "The beneficiary's address cannot be found");
+        require(beneficiaries[_beneficiary].amount > 0, "The beneficiary's address cannot be found");
         // Listing date is not set
-        if (info.startedAt == 0) {
-            return (info.released, info.lastReleasedAt);
+        if (beneficiaries[_beneficiary].startedAt == 0) {
+            return (beneficiaries[_beneficiary].released, beneficiaries[_beneficiary].lastReleasedAt);
+        }
+
+        // Transfer immediately if any upfront amount
+        if (beneficiaries[_beneficiary].upfrontAmount > 0 && beneficiaries[_beneficiary].released == 0) {
+            return (beneficiaries[_beneficiary].upfrontAmount, 0);
         }
 
         // No vesting (All amount unlock at the TGE)
-        if (info.duration == 0) {
-            return (info.amount, info.startedAt);
+        if (beneficiaries[_beneficiary].duration == 0) {
+            return (beneficiaries[_beneficiary].amount, beneficiaries[_beneficiary].startedAt);
         }
 
         // Vesting has not started yet
-        if (block.timestamp < info.startedAt) {
-            return (info.released, info.lastReleasedAt);
+        if (block.timestamp < beneficiaries[_beneficiary].startedAt) {
+            return (beneficiaries[_beneficiary].released, beneficiaries[_beneficiary].lastReleasedAt);
         }
 
         // Vesting is done
-        if (block.timestamp >= info.startedAt.add(info.duration)) {
-            return (info.amount, info.startedAt.add(info.duration));
+        if (block.timestamp >= beneficiaries[_beneficiary].startedAt.add(beneficiaries[_beneficiary].duration)) {
+            return (beneficiaries[_beneficiary].amount, beneficiaries[_beneficiary].startedAt.add(beneficiaries[_beneficiary].duration));
         }
 
         // It's too soon to next release
         if (
-            info.lastReleasedAt > 0 &&
-            block.timestamp - info.interval < info.lastReleasedAt
+            beneficiaries[_beneficiary].lastReleasedAt > 0 &&
+            block.timestamp - beneficiaries[_beneficiary].interval < beneficiaries[_beneficiary].lastReleasedAt
         ) {
-            return (info.released, info.lastReleasedAt);
+            return (beneficiaries[_beneficiary].released, beneficiaries[_beneficiary].lastReleasedAt);
         }
 
         // Vesting is interval counter
-        uint256 totalVestedAmount = info.released;
-        uint256 lastIntervalDate = info.lastReleasedAt > 0
-        ? info.lastReleasedAt
-        : info.startedAt;
+        uint256 totalVestedAmount = beneficiaries[_beneficiary].released;
+        uint256 lastIntervalDate = beneficiaries[_beneficiary].lastReleasedAt > 0
+        ? beneficiaries[_beneficiary].lastReleasedAt
+        : beneficiaries[_beneficiary].startedAt;
 
         uint256 multiplyIntervals;
-        while (block.timestamp >= lastIntervalDate.add(info.interval)) {
+        while (block.timestamp >= lastIntervalDate.add(beneficiaries[_beneficiary].interval)) {
             multiplyIntervals = multiplyIntervals.add(1);
-            lastIntervalDate = lastIntervalDate.add(info.interval);
+            lastIntervalDate = lastIntervalDate.add(beneficiaries[_beneficiary].interval);
         }
 
         if (multiplyIntervals > 0) {
-            uint256 newVestedAmount = info
+            uint256 newVestedAmount = beneficiaries[_beneficiary]
             .leftOverVestingAmount
-            .mul(multiplyIntervals.mul(info.interval))
-            .div(info.duration);
+            .mul(multiplyIntervals.mul(beneficiaries[_beneficiary].interval))
+            .div(beneficiaries[_beneficiary].duration);
 
             totalVestedAmount = totalVestedAmount.add(newVestedAmount);
         }
@@ -793,13 +709,12 @@ contract BEP20Vesting is Ownable {
         uint256 _amount,
         uint256 _lastIntervalDate
     ) internal returns (bool) {
-        VestingBeneficiary storage info = beneficiaries[_beneficiary];
         if (block.timestamp < _lastIntervalDate) {
             return false;
         }
         // Update beneficiary information
-        info.released = info.released.add(_amount);
-        info.lastReleasedAt = _lastIntervalDate;
+        beneficiaries[_beneficiary].released = beneficiaries[_beneficiary].released.add(_amount);
+        beneficiaries[_beneficiary].lastReleasedAt = _lastIntervalDate;
 
         // Emit event to of new release
         emit Released(_beneficiary, _amount);
@@ -809,34 +724,9 @@ contract BEP20Vesting is Ownable {
     }
 
     /**
-     * @dev Release vested tokens to a all beneficiaries.
-     */
-    function releaseBeneficiaryTokens() public onlyOwner {
-        // Get current vesting beneficiaries
-        uint256 beneficiariesCount = beneficiaryAddresses.length;
-        for (uint256 i = 0; i < beneficiariesCount; i++) {
-            // Calculate the releasable amount
-            (
-            ,
-            uint256 _newReleaseAmount,
-            uint256 _lastIntervalDate
-            ) = releasableAmount(beneficiaryAddresses[i]);
-
-            // Release new vested token to the beneficiary
-            if (_newReleaseAmount > 0) {
-                releaseTo(
-                    beneficiaryAddresses[i],
-                    _newReleaseAmount,
-                    _lastIntervalDate
-                );
-            }
-        }
-    }
-
-    /**
      * @dev Release vested tokens to current beneficiary.
      */
-    function releaseMyTokens() public onlyBeneficiaries {
+    function releaseMyTokens() external onlyBeneficiaries {
         // Calculate the releasable amount
         (
         ,
