@@ -672,7 +672,7 @@ contract BEP20Vesting is Context{
         // It's too soon to next release
         if (
             beneficiaries[_beneficiary].lastReleasedAt > 0 &&
-            block.timestamp - beneficiaries[_beneficiary].interval < beneficiaries[_beneficiary].lastReleasedAt
+            block.timestamp < beneficiaries[_beneficiary].interval + beneficiaries[_beneficiary].lastReleasedAt
         ) {
             return (beneficiaries[_beneficiary].released, beneficiaries[_beneficiary].lastReleasedAt);
         }
